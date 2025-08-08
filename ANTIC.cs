@@ -44,7 +44,7 @@ namespace Emulators
         {
             set
             {
-                //TODO: _bus.Write(0xd400, Value);
+                _bus.Write(0xd400, value);
             }
             get
             {
@@ -57,18 +57,21 @@ namespace Emulators
         {
             set
             {
-                //TODO: _bus.Write(0xd401, Value);
+                _bus.Write(0xd401, value);
             }
             get
             {
-                //TODO: _bus.Read(0xd400);
-                return 0x00;
+                return _bus.Read(0xd401);
             }
         }
 
         //display list pointer (low byte), write, 0xd402
         byte DLISTL
         {
+            set
+            {
+                _bus.Write(0xd402, value);
+            }
             get
             {
                 return _bus.Read(0xd402);
@@ -78,6 +81,10 @@ namespace Emulators
         //display list pointer (high byte), write, 0xd403
         byte DLISTH
         {
+            set
+            {
+                _bus.Write(0xd403, value);
+            }
             get
             {
                 return _bus.Read(0xd403);
@@ -89,12 +96,11 @@ namespace Emulators
         {
             set
             {
-                //TODO: _bus.Write(0xd404, Value);
+                _bus.Write(0xd404, value);
             }
             get
             {
-                //TODO: _bus.Read(0xd404);
-                return 0x00;
+                return _bus.Read(0xd404);
             }
         }
 
@@ -103,12 +109,11 @@ namespace Emulators
         {
             set
             {
-                //TODO: _bus.Write(0xd405, Value);
+                _bus.Write(0xd405, value);
             }
             get
             {
-                //TODO: _bus.Read(0xd405);
-                return 0x00;
+                return _bus.Read(0xd405);
             }
         }
 
@@ -117,12 +122,11 @@ namespace Emulators
         {
             set
             {
-                //TODO: _bus.Write(0xd407, Value);
+                _bus.Write(0xd407, value);
             }
             get
             {
-                //TODO: _bus.Read(0xd407);
-                return 0x00;
+                return _bus.Read(0xd407);
             }
         }
 
@@ -131,12 +135,11 @@ namespace Emulators
         {
             set
             {
-                //TODO: _bus.Write(0xd409, Value);
+                _bus.Write(0xd409, value);
             }
             get
             {
-                //TODO: _bus.Read(0xd409);
-                return 0x00;
+                return _bus.Read(0xd409);
             }
         }
 
@@ -145,12 +148,11 @@ namespace Emulators
         {
             set
             {
-                //TODO: _bus.Write(0xd40a, Value);
+                _bus.Write(0xd40a, value);
             }
             get
             {
-                //TODO: _bus.Read(0xd40a);
-                return 0x00;
+                return _bus.Read(0xd40a);
             }
         }
 
@@ -159,8 +161,7 @@ namespace Emulators
         {
             get
             {
-                //TODO: _bus.Read(0xd40b);
-                return 0x00;
+                return _bus.Read(0xd40b);
             }
         }
 
@@ -170,8 +171,7 @@ namespace Emulators
         {
             get
             {
-                //TODO: _bus.Read(0xd40c);
-                return 0x00;
+                return _bus.Read(0xd40c);
             }
         }
 
@@ -179,9 +179,9 @@ namespace Emulators
         //write to ram to be able to read by CPU
         byte PENV
         {
-            set
+            get
             {
-                _bus.Write(0xd40d, value);
+                return _bus.Read(0xd40d);
             }
         }
 
@@ -189,6 +189,10 @@ namespace Emulators
         //read from ram after CPU writes the value
         byte NMIEN
         {
+            set
+            {
+                _bus.Write(0xd40e, value);
+            }
             get
             {
                 return _bus.Read(0xd40e);
@@ -199,19 +203,23 @@ namespace Emulators
         //read from ram after CPU writes the value
         byte NMIRES
         {
+            set
+            {
+                _bus.Write(0xd40f, value);
+            }
             get
             {
                 return _bus.Read(0xd40f);
             }
         }
-        //nmi status, read
-        //write to ram to be able to read by CPU
         
+        //nmi status, read, 0xd40f
+        //write to ram to be able to read by CPU
         byte NMIST
         {
-            set
+            get
             {
-                _bus.Write(0xd40f, value);
+                return _bus.Read(0xd40f);
             }
         }
 
@@ -227,6 +235,48 @@ namespace Emulators
         {
             ushort dlist_addr = (ushort)((DLISTH << 8) | DLISTL);
             Console.WriteLine("dlist: ${0:X4}", dlist_addr);
+        }
+
+        /// <summary>
+        /// Example method demonstrating ANTIC register usage
+        /// Shows how to read from and write to ANTIC registers
+        /// </summary>
+        public void ExampleRegisterUsage()
+        {
+            // Example: Writing to ANTIC registers
+            
+            // Set display list pointer to address $8000
+            DLISTL = 0x00;  // Low byte
+            DLISTH = 0x80;  // High byte
+            
+            // Enable DMA for display list and playfield
+            DMACTL = 0x22;  // Enable display list DMA and single-line resolution
+            
+            // Set character set base address
+            CHBASE = 0xE0;  // Point to character ROM
+            
+            // Set horizontal and vertical scroll
+            HSCROL = 0x08;  // Fine scroll 8 pixels right
+            VSCROL = 0x04;  // Fine scroll 4 pixels down
+            
+            // Example: Reading from ANTIC registers
+            
+            // Read current vertical line counter
+            byte currentLine = VCOUNT;
+            Console.WriteLine($"Current scanline: {currentLine}");
+            
+            // Read light pen positions (if light pen is connected)
+            byte penX = PENH;
+            byte penY = PENV;
+            Console.WriteLine($"Light pen position: X={penX}, Y={penY}");
+            
+            // Read NMI status
+            byte nmiStatus = NMIST;
+            Console.WriteLine($"NMI Status: 0x{nmiStatus:X2}");
+            
+            // Read back the display list pointer we set earlier
+            ushort displayListAddr = (ushort)((DLISTH << 8) | DLISTL);
+            Console.WriteLine($"Display List Address: 0x{displayListAddr:X4}");
         }
     }
 }
