@@ -75,7 +75,7 @@ namespace Emulators
 			_fetched = 0x00;
 
 			//reset takes some cycles
-			_cycles = 8;//TODO: check how do I know?
+			_cycles = 7;
 		}
 
 		//Interrupt Request - standard interrupt can be disabled setting I flag
@@ -131,9 +131,13 @@ namespace Emulators
 			_cycles = 8;
 		}
 
+		public bool Halt = false;
+
 		//one clock cycle
 		public void Clock()
 		{
+			if (Halt) return;
+
 			if (_cycles == 0)
 			{
 				_opcode = _bus.Read(PC);
@@ -155,7 +159,6 @@ namespace Emulators
 				// of cycles this instruction requires before its completed
 				_cycles += (byte)(additional_cycle1 & additional_cycle2);
 
-				//TODO: duplicated code?
 				// Always set the unused status flag bit to 1
 				SetFlag(FLAGS65C02.U, true);
 			}
@@ -579,10 +582,10 @@ namespace Emulators
 
 			_temp = (ushort)(A + value + GetFlag(FLAGS65C02.C));
 
-			SetFlag(FLAGS65C02.C, (_temp & 0xFF00) == 1);
+			SetFlag(FLAGS65C02.C, (_temp & 0xFF00) != 0);
 			SetFlag(FLAGS65C02.Z, (_temp & 0x00FF) == 0);
-			SetFlag(FLAGS65C02.V, ((_temp ^ A) & (_temp ^ value) & 0x0080) == 1);
-			SetFlag(FLAGS65C02.N, (_temp & 0x0080) == 1);
+			SetFlag(FLAGS65C02.V, ((_temp ^ A) & (_temp ^ value) & 0x0080) != 0);
+			SetFlag(FLAGS65C02.N, (_temp & 0x0080) != 0);
 			A = (byte)(_temp & 0x00FF);
 
 			return 0x01;
@@ -678,8 +681,8 @@ namespace Emulators
 			Fetch();
 			_temp = (ushort)(A & _fetched);
 			SetFlag(FLAGS65C02.Z, (_temp & 0x00FF) == 0x00);
-			SetFlag(FLAGS65C02.N, (_fetched & (1 << 7)) == 0x01);
-			SetFlag(FLAGS65C02.V, (_fetched & (1 << 6)) == 0x01);
+			SetFlag(FLAGS65C02.N, (_fetched & (1 << 7)) != 0);
+			SetFlag(FLAGS65C02.V, (_fetched & (1 << 6)) != 0);
 			
 			return 0x00;
 		}
@@ -840,7 +843,7 @@ namespace Emulators
 			
 			SetFlag(FLAGS65C02.C, A >= _fetched);
 			SetFlag(FLAGS65C02.Z, (_temp & 0x00FF) == 0x0000);
-			SetFlag(FLAGS65C02.N, (_temp & 0x0080) == 0x0001);
+			SetFlag(FLAGS65C02.N, (_temp & 0x0080) != 0);
 			
 			return 0x01;
 		}
@@ -853,7 +856,7 @@ namespace Emulators
 			
 			SetFlag(FLAGS65C02.C, X >= _fetched);
 			SetFlag(FLAGS65C02.Z, (_temp & 0x00FF) == 0x0000);
-			SetFlag(FLAGS65C02.N, (_temp & 0x0080) == 0x0001);
+			SetFlag(FLAGS65C02.N, (_temp & 0x0080) != 0);
 			
 			return 0x00;
 		}
@@ -866,7 +869,7 @@ namespace Emulators
 			
 			SetFlag(FLAGS65C02.C, Y >= _fetched);
 			SetFlag(FLAGS65C02.Z, (_temp & 0x00FF) == 0x0000);
-			SetFlag(FLAGS65C02.N, (_temp & 0x0080) == 0x0001);
+			SetFlag(FLAGS65C02.N, (_temp & 0x0080) != 0);
 			
 			return 0x00;
 		}
@@ -879,7 +882,7 @@ namespace Emulators
 			
 			_bus.Write(_addr_abs, (byte)(_temp & 0x00FF));
 			SetFlag(FLAGS65C02.Z, (_temp & 0x00FF) == 0x0000);
-			SetFlag(FLAGS65C02.N, (_temp & 0x0080) == 0x0001);
+			SetFlag(FLAGS65C02.N, (_temp & 0x0080) != 0);
 			
 			return 0x00;
 		}
@@ -925,7 +928,7 @@ namespace Emulators
 			_temp = (ushort)(_fetched + 1);
 			_bus.Write(_addr_abs, (byte)(_temp & 0x00FF));
 			SetFlag(FLAGS65C02.Z, (_temp & 0x00FF) == 0x0000);
-			SetFlag(FLAGS65C02.N, (_temp & 0x0080) == 0x0001);
+			SetFlag(FLAGS65C02.N, (_temp & 0x0080) != 0);
 			
 			return 0x00;
 		}
@@ -1014,7 +1017,7 @@ namespace Emulators
 			_temp = (ushort)(_fetched >> 1);
 			
 			SetFlag(FLAGS65C02.Z, (_temp & 0x00FF) == 0x0000);
-			SetFlag(FLAGS65C02.N, (_temp & 0x0080) == 0x0001);
+			SetFlag(FLAGS65C02.N, (_temp & 0x0080) != 0);
 
 			if (lookup[_opcode].GetAddrMode().Equals(IMP()))
 				A = (byte)(_temp & 0x00FF);
@@ -1102,9 +1105,9 @@ namespace Emulators
 			Fetch();
 			_temp = (ushort)((_fetched << 1) | GetFlag(FLAGS65C02.C));
 			
-			SetFlag(FLAGS65C02.C, (_temp & 0xFF00) == 0x01);
+			SetFlag(FLAGS65C02.C, (_temp & 0xFF00) != 0);
 			SetFlag(FLAGS65C02.Z, (_temp & 0x00FF) == 0x0000);
-			SetFlag(FLAGS65C02.N, (_temp & 0x0080) == 0x0001);
+			SetFlag(FLAGS65C02.N, (_temp & 0x0080) != 0);
 			
 			if (lookup[_opcode].GetAddrMode().Equals(IMP()))
 				A = (byte)(_temp & 0x00FF);
@@ -1119,7 +1122,7 @@ namespace Emulators
 			_temp = (ushort)((GetFlag(FLAGS65C02.C) << 7) | (_fetched >> 1));
 			SetFlag(FLAGS65C02.C, (_fetched & 0x01) == 0x01);
 			SetFlag(FLAGS65C02.Z, (_temp & 0x00FF) == 0x00);
-			SetFlag(FLAGS65C02.N, (_temp & 0x0080) == 0x01);
+			SetFlag(FLAGS65C02.N, (_temp & 0x0080) != 0);
 
 			if (lookup[_opcode].GetAddrMode().Equals(IMP()))
 				A = (byte)(_temp & 0x00FF);
@@ -1133,15 +1136,13 @@ namespace Emulators
 		{
 			SP++;
 			SR = _bus.Read((ushort)(0x0100 + SP));
-			byte f = (byte)FLAGS65C02.B;
-			SR &= (byte)~f;
-			f = (byte)FLAGS65C02.U;
-			SR &= (byte)~f;
+			SetFlag(FLAGS65C02.B, false);
+			SetFlag(FLAGS65C02.U, true);
 
 			SP++;
 			PC = _bus.Read((ushort)(0x0100 + SP));
-			PC++;
-			PC |= (byte)(_bus.Read((ushort)(0x0100 + SP)) << 8);
+			SP++;
+			PC |= (ushort)(_bus.Read((ushort)(0x0100 + SP)) << 8);
 			
 			return 0x00;
 		}
