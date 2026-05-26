@@ -56,15 +56,21 @@ namespace Emulators
         private int _scanline = 0;
         private int _cycle = 0; // 0-113 cycles per scanline
         private ushort _dlist_ptr = 0;
+        private ushort _mscan_ptr = 0;
         private byte _dli = 0;
         private int _mode_line = 0;
         private int _mode_height = 0;
+        private byte[] _video_memory = new byte[160 * 262]; // Simplified pixel buffer
+
+        private ushort _pmbase_ptr = 0;
 
         public void Tick()
         {
             // DMA Control Check
             byte dmactl = _bus.Read(0xD400);
             bool dl_dma_enabled = (dmactl & 0x20) != 0;
+            bool screen_dma_enabled = (dmactl & 0x10) != 0 || (dmactl & 0x03) != 0;
+            bool pm_dma_enabled = (dmactl & 0x0C) != 0;
 
             _cycle++;
             if (_cycle >= 114)
@@ -100,10 +106,37 @@ namespace Emulators
             }
 
             // Simple Display List Fetching Logic
-            // In real hardware, this happens at specific cycles.
-            // Here we'll simulate cycle-stealing when fetching a new instruction.
             if (dl_dma_enabled && _scanline >= 8 && _scanline < 248)
             {
+                // Screen DMA simulation
+                // In a real Atari, different modes steal different amounts of cycles
+                // For now, we'll simulate a fixed amount of theft if screen DMA is on
+                if (screen_dma_enabled && _mode_height > 0 && _cycle == 10)
+                {
+                    // Fetch some data (e.g. 40 bytes for a normal line)
+                    // This steals many cycles.
+                    if (_cpu != null) _cpu.Halt = true;
+
+                    // Simple loop to simulate fetching 40 bytes and rendering
+                    if (_cpu != null) _cpu.Halt = true;
+
+                    for (int i = 0; i < 40; i++)
+                    {
+                        byte data = _bus.Read(_mscan_ptr++);
+                        // Render into video memory (very simplified: 1 byte per 4 color clocks)
+                        for (int p = 0; p < 4; p++)
+                        {
+                            int idx = _scanline * 160 + (i * 4 + p);
+                            if (idx < _video_memory.Length)
+                            {
+                                _video_memory[idx] = data;
+                            }
+                        }
+                    }
+
+                    if (_cpu != null) _cpu.Halt = false;
+                }
+
                 if (_mode_line >= _mode_height)
                 {
                     // Fetch new instruction
@@ -135,12 +168,49 @@ namespace Emulators
                     _mode_line = 0;
                     _mode_height = 0;
                 }
+
+                if (pm_dma_enabled)
+                {
+                    _pmbase_ptr = (ushort)(_bus.Read(0xD407) << 8);
+                }
+            }
+
+            // Simple Player DMA simulation
+            if (pm_dma_enabled && _scanline >= 16 && _scanline < 240 && _cycle == 20)
+            {
+                if (_cpu != null) _cpu.Halt = true;
+
+                // Fetch player data (simplified 1-line resolution)
+                // PMBASE + 0x400 (P0), 0x500 (P1), etc.
+                for (int i = 0; i < 4; i++)
+                {
+                    _bus.Read((ushort)(_pmbase_ptr + 0x400 + (i * 0x100) + _scanline));
+                }
+
+                if (_cpu != null) _cpu.Halt = false;
             }
         }
+
+        public byte[] GetVideoBuffer() => _video_memory;
 
         private void ProcessDLI()
         {
             byte opcode = (byte)(_dli & 0x0F);
+
+            // Handle Display List Interrupt (DLI) - bit 7
+            if ((_dli & 0x80) != 0)
+            {
+                byte nmien = _bus.Read(0xD40E);
+                if ((nmien & 0x80) != 0) // DLI enabled
+                {
+                    // Set DLI bit in NMIST
+                    byte nmist = _bus.Read(0xD40F);
+                    _bus.Write(0xD40F, (byte)(nmist | 0x80));
+
+                    // Trigger NMI on CPU
+                    _cpu?.Nmi();
+                }
+            }
 
             // Very simplified mode height mapping
             if (opcode == 0x00) // Blank lines
@@ -174,9 +244,9 @@ namespace Emulators
             // Handle Load Memory Scan (LMS) - bit 6
             if (opcode >= 0x02 && (_dli & 0x40) != 0)
             {
-                // Fetch 2 bytes address (simplified, we don't store it yet)
-                _bus.Read(_dlist_ptr++);
-                _bus.Read(_dlist_ptr++);
+                byte lo = _bus.Read(_dlist_ptr++);
+                byte hi = _bus.Read(_dlist_ptr++);
+                _mscan_ptr = (ushort)((hi << 8) | lo);
             }
         }
     }

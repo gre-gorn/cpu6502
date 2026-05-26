@@ -107,7 +107,7 @@ namespace Emulator
                     case ConsoleKey.N: cpu.Nmi(); break;
                     case ConsoleKey.Spacebar:
                         ExecuteStep(ref cpu, ref antic);
-                        PrintFullState(ref cpu);
+                        PrintFullState(ref cpu, ref antic);
                         break;
                     default:
                         // For other keys, just run one step to keep build happy if I missed something
@@ -128,13 +128,22 @@ namespace Emulator
             }
             while (!cpu.Complete());
         }
-        static void PrintFullState(ref CPU6502 cpu)
+        static void PrintFullState(ref CPU6502 cpu, ref ANTIC antic)
         {
             PrintCPUState(ref cpu);
             foreach (string str in cpu.Disassemble(cpu.PC, cpu.PC).Values)
             {
                 Console.WriteLine(str);
             }
+
+            // Print a small part of the video buffer to see if it's changing
+            byte[] video = antic.GetVideoBuffer();
+            Console.Write("Video Sample: ");
+            for (int i = 0; i < 10; i++)
+            {
+                Console.Write("{0:X2} ", video[i + 160 * 100]); // Sample line 100
+            }
+            Console.WriteLine();
         }
     }
 }
