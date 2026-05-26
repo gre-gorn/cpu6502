@@ -38,195 +38,146 @@ namespace Emulators
             NMIST  | Non-Maskable Interrupt (NMI) Status | Read  | $D40F | 54287
          */
 
-        //ANTIC registers
-        //direct memory acces control, write, 0xd400
-        byte DMACTL
-        {
-            set
-            {
-                //TODO: _bus.Write(0xd400, Value);
-            }
-            get
-            {
-                return _bus.Read(0xd400);
-            }
-        }
-
-        //character control, write, 0xd401
-        byte CHACTL
-        {
-            set
-            {
-                //TODO: _bus.Write(0xd401, Value);
-            }
-            get
-            {
-                //TODO: _bus.Read(0xd400);
-                return 0x00;
-            }
-        }
-
-        //display list pointer (low byte), write, 0xd402
-        byte DLISTL
-        {
-            get
-            {
-                return _bus.Read(0xd402);
-            }
-        }
-
-        //display list pointer (high byte), write, 0xd403
-        byte DLISTH
-        {
-            get
-            {
-                return _bus.Read(0xd403);
-            }
-        }
-
-        //horizontal fine scroll, write, 0xd404
-        byte HSCROL
-        {
-            set
-            {
-                //TODO: _bus.Write(0xd404, Value);
-            }
-            get
-            {
-                //TODO: _bus.Read(0xd404);
-                return 0x00;
-            }
-        }
-
-        //vertical fine scroll, write, 0xd405
-        byte VSCROL
-        {
-            set
-            {
-                //TODO: _bus.Write(0xd405, Value);
-            }
-            get
-            {
-                //TODO: _bus.Read(0xd405);
-                return 0x00;
-            }
-        }
-
-        //player/missile base address, write, 0xd407
-        byte PMBASE
-        {
-            set
-            {
-                //TODO: _bus.Write(0xd407, Value);
-            }
-            get
-            {
-                //TODO: _bus.Read(0xd407);
-                return 0x00;
-            }
-        }
-
-        //character set base address, write, 0xd409
-        byte CHBASE
-        {
-            set
-            {
-                //TODO: _bus.Write(0xd409, Value);
-            }
-            get
-            {
-                //TODO: _bus.Read(0xd409);
-                return 0x00;
-            }
-        }
-
-        //wait for sync, write, 0xd40a
-        byte WSYNC
-        {
-            set
-            {
-                //TODO: _bus.Write(0xd40a, Value);
-            }
-            get
-            {
-                //TODO: _bus.Read(0xd40a);
-                return 0x00;
-            }
-        }
-
-        //verctical line counter, read, 0xd40b
-        byte VCOUNT
-        {
-            get
-            {
-                //TODO: _bus.Read(0xd40b);
-                return 0x00;
-            }
-        }
-
-        //light pen horizontal position, read, 0xd40c
-        //write to ram to be able to read by CPU
-        byte PENH
-        {
-            get
-            {
-                //TODO: _bus.Read(0xd40c);
-                return 0x00;
-            }
-        }
-
-        //light pen vertical position, read, 0xd40d
-        //write to ram to be able to read by CPU
-        byte PENV
-        {
-            set
-            {
-                _bus.Write(0xd40d, value);
-            }
-        }
-
-        //nmi enable, write, 0xd40e
-        //read from ram after CPU writes the value
-        byte NMIEN
-        {
-            get
-            {
-                return _bus.Read(0xd40e);
-            }
-        }
-
-        //nmi reset, write, 0xd40f
-        //read from ram after CPU writes the value
-        byte NMIRES
-        {
-            get
-            {
-                return _bus.Read(0xd40f);
-            }
-        }
-        //nmi status, read
-        //write to ram to be able to read by CPU
-        
-        byte NMIST
-        {
-            set
-            {
-                _bus.Write(0xd40f, value);
-            }
-        }
 
         private IBus _bus;
-        
+
         //Link ANTIC with system Bus
         public void ConnectBus(ref IBus bus)
         {
             _bus = bus;
         }
 
+        private CPU6502 _cpu;
+        public void ConnectCPU(CPU6502 cpu)
+        {
+            _cpu = cpu;
+        }
+
+        private int _scanline = 0;
+        private int _cycle = 0; // 0-113 cycles per scanline
+        private ushort _dlist_ptr = 0;
+        private byte _dli = 0;
+        private int _mode_line = 0;
+        private int _mode_height = 0;
+
         public void Tick()
         {
-            ushort dlist_addr = (ushort)((DLISTH << 8) | DLISTL);
-            Console.WriteLine("dlist: ${0:X4}", dlist_addr);
+            // DMA Control Check
+            byte dmactl = _bus.Read(0xD400);
+            bool dl_dma_enabled = (dmactl & 0x20) != 0;
+
+            _cycle++;
+            if (_cycle >= 114)
+            {
+                _cycle = 0;
+                _scanline++;
+
+                if (_scanline >= 262)
+                {
+                    _scanline = 0;
+                }
+
+                // Update VCOUNT in RAM
+                _bus.Write(0xD40B, (byte)(_scanline >> 1));
+
+                // Clear WSYNC halt at the start of horizontal blanking or start of line
+                // According to docs, RDY is reset by the beginning of horizontal blank.
+                // In our simple model, we'll clear it at cycle 0.
+                if (_cpu != null)
+                {
+                    _cpu.Halt = false;
+                }
+            }
+
+            // Monitor WSYNC write
+            // In a real system, the write itself triggers the latch.
+            // Here we check if the value at $D40A is non-zero (assuming the CPU just wrote to it)
+            // or we could check every cycle.
+            if (_bus.Read(0xD40A) != 0)
+            {
+                if (_cpu != null) _cpu.Halt = true;
+                _bus.Write(0xD40A, 0); // Clear the register after halting
+            }
+
+            // Simple Display List Fetching Logic
+            // In real hardware, this happens at specific cycles.
+            // Here we'll simulate cycle-stealing when fetching a new instruction.
+            if (dl_dma_enabled && _scanline >= 8 && _scanline < 248)
+            {
+                if (_mode_line >= _mode_height)
+                {
+                    // Fetch new instruction
+                    // Cycle stealing: ANTIC halts CPU to fetch instruction
+                    if (_cpu != null) _cpu.Halt = true;
+
+                    _dli = _bus.Read(_dlist_ptr++);
+
+                    // Reset CPU Halt after "stealing" a cycle (simplified)
+                    // In reality, it might stay halted for more cycles if it's a JMP or LSM
+                    if (_cpu != null) _cpu.Halt = false;
+
+                    ProcessDLI();
+                    _mode_line = 0;
+                }
+                else
+                {
+                    _mode_line++;
+                }
+            }
+
+            if (_scanline == 0 && _cycle == 0)
+            {
+                if (dl_dma_enabled)
+                {
+                    byte lo = _bus.Read(0xD402);
+                    byte hi = _bus.Read(0xD403);
+                    _dlist_ptr = (ushort)((hi << 8) | lo);
+                    _mode_line = 0;
+                    _mode_height = 0;
+                }
+            }
+        }
+
+        private void ProcessDLI()
+        {
+            byte opcode = (byte)(_dli & 0x0F);
+
+            // Very simplified mode height mapping
+            if (opcode == 0x00) // Blank lines
+            {
+                _mode_height = ((_dli & 0x70) >> 4) + 1;
+            }
+            else if (opcode == 0x02 || opcode == 0x03 || opcode == 0x04 || opcode == 0x05)
+            {
+                _mode_height = 8;
+            }
+            else if (opcode == 0x06 || opcode == 0x07)
+            {
+                _mode_height = 10;
+            }
+            else if (opcode == 0x0F) // Jump
+            {
+                if ((_dli & 0x40) != 0) // JVB
+                {
+                    // Fetch address
+                    byte lo = _bus.Read(_dlist_ptr++);
+                    byte hi = _bus.Read(_dlist_ptr++);
+                    _dlist_ptr = (ushort)((hi << 8) | lo);
+                    _mode_height = 0; // Trigger immediate refetch next line
+                }
+            }
+            else
+            {
+                _mode_height = 1;
+            }
+
+            // Handle Load Memory Scan (LMS) - bit 6
+            if (opcode >= 0x02 && (_dli & 0x40) != 0)
+            {
+                // Fetch 2 bytes address (simplified, we don't store it yet)
+                _bus.Read(_dlist_ptr++);
+                _bus.Read(_dlist_ptr++);
+            }
         }
     }
 }

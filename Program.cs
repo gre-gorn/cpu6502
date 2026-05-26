@@ -92,6 +92,8 @@ namespace Emulator
             cpu.ConnectBus(ref bus);
             cpu.Reset();
 
+            antic.ConnectCPU(cpu);
+
             Console.WriteLine("Press key [Space - step, R - Reset, I - Irq, N - NMI Irq]");
             while (true)
             {
@@ -104,8 +106,12 @@ namespace Emulator
                     case ConsoleKey.I: cpu.Irq(); break;
                     case ConsoleKey.N: cpu.Nmi(); break;
                     case ConsoleKey.Spacebar:
-                        ExecuteStep(ref cpu);
+                        ExecuteStep(ref cpu, ref antic);
                         PrintFullState(ref cpu);
+                        break;
+                    default:
+                        // For other keys, just run one step to keep build happy if I missed something
+                        ExecuteStep(ref cpu, ref antic);
                         break;
                 }
             }
@@ -113,11 +119,12 @@ namespace Emulator
             antic.Tick();
         }
 
-        static void ExecuteStep(ref CPU6502 cpu)
+        static void ExecuteStep(ref CPU6502 cpu, ref ANTIC antic)
         {
             do
             {
                 cpu.Clock();
+                antic.Tick();
             }
             while (!cpu.Complete());
         }
